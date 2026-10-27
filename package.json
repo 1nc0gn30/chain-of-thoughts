@@ -1,0 +1,33 @@
+{
+  "name": "chain-of-thoughts",
+  "version": "1.0.0",
+  "description": "Chain of Thoughts (zoth-cot) — Cryptographic Merkle Working Memory DAG, Automatic Fact Extraction & Multi-Turn Context Engine for Embodied AI Agents (ZothOS & Zoth Studio)",
+  "main": "server.js",
+  "bin": {
+    "zoth-cot": "./bin/zoth-cot"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "cli": "node ./bin/zoth-cot --tree"
+  },
+  "keywords": [
+    "chain-of-thought",
+    "ai-memory",
+    "working-memory",
+    "merkle-dag",
+    "context-engineering",
+    "multi-turn-llm",
+    "ollama",
+    "braille-ui",
+    "bayer-dither",
+    "zothos",
+    "nullai"
+  ],
+  "author": "Neal Frazier <1nc0gn30@users.noreply.github.com> (https://nealfrazier.tech)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1nc0gn30/chain-of-thoughts.git"
+  },
+  "homepage": "https://github.com/1nc0gn30/chain-of-thoughts"
+}
