@@ -16,4 +16,4 @@ Allow: /
 User-agent: Applebot
 Allow: /
 
-Sitemap: https://zothos-lite.nullai.tech/sitemap.xml
+Sitemap: https://cot.nullai.tech/sitemap.xml

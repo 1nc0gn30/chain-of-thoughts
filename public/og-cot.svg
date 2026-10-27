@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <radialGradient id="bg-glow" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#1A1F2C" />
+      <stop offset="60%" stop-color="#0B0D13" />
+      <stop offset="100%" stop-color="#050608" />
+    </radialGradient>
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE885" />
+      <stop offset="50%" stop-color="#E5C058" />
+      <stop offset="100%" stop-color="#997E28" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="24" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg-glow)" />
+
+  <!-- Dither / Grid Lines -->
+  <g opacity="0.12" stroke="#4F5D7E" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105" />
+    <line x1="0" y1="210" x2="1200" y2="210" />
+    <line x1="0" y1="315" x2="1200" y2="315" />
+    <line x1="0" y1="420" x2="1200" y2="420" />
+    <line x1="0" y1="525" x2="1200" y2="525" />
+    <line x1="200" y1="0" x2="200" y2="630" />
+    <line x1="400" y1="0" x2="400" y2="630" />
+    <line x1="600" y1="0" x2="600" y2="630" />
+    <line x1="800" y1="0" x2="800" y2="630" />
+    <line x1="1000" y1="0" x2="1000" y2="630" />
+  </g>
+
+  <!-- Ambient Golden Halo -->
+  <circle cx="600" cy="240" r="160" fill="#E5C058" opacity="0.08" filter="url(#glow)" />
+
+  <!-- Hero Anchor Octagon Merkle Node -->
+  <g transform="translate(600, 200)">
+    <polygon points="0,-75 53,-53 75,0 53,53 0,75 -53,53 -75,0 -53,-53" fill="#0C0E14" stroke="url(#gold-grad)" stroke-width="4" filter="url(#glow)" />
+    <!-- Braille Pattern Glyphs Inside / Around -->
+    <text x="0" y="8" font-family="monospace" font-size="28" fill="#E5C058" text-anchor="middle" font-weight="bold">◈ N00</text>
+    <text x="0" y="32" font-family="monospace" font-size="12" fill="#8B97AB" text-anchor="middle" letter-spacing="3">SHA-256 MERKLE</text>
+    <!-- Merkle Link Lines -->
+    <line x1="-75" y1="0" x2="-180" y2="0" stroke="url(#gold-grad)" stroke-width="2" stroke-dasharray="4,4" />
+    <line x1="75" y1="0" x2="180" y2="0" stroke="url(#gold-grad)" stroke-width="2" stroke-dasharray="4,4" />
+    <!-- Child Nodes -->
+    <circle cx="-180" cy="0" r="28" fill="#141824" stroke="#8B97AB" stroke-width="2" />
+    <text x="-180" y="5" font-family="monospace" font-size="12" fill="#F1F4F9" text-anchor="middle">RECALL</text>
+    <circle cx="180" cy="0" r="28" fill="#141824" stroke="#8B97AB" stroke-width="2" />
+    <text x="180" y="5" font-family="monospace" font-size="12" fill="#F1F4F9" text-anchor="middle">SYNTH</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="600" y="370" font-family="sans-serif" font-weight="800" font-size="52" fill="#F1F4F9" text-anchor="middle" letter-spacing="-1">
+    CHAIN OF THOUGHTS
+  </text>
+  <text x="600" y="420" font-family="monospace" font-weight="600" font-size="22" fill="#E5C058" text-anchor="middle" letter-spacing="4">
+    zoth-cot // MERKLE WORKING MEMORY DAG &amp; BRAILLE STUDIO
+  </text>
+  <text x="600" y="470" font-family="sans-serif" font-weight="400" font-size="20" fill="#9BA3B8" text-anchor="middle">
+    Real-Time Regex Entity Extraction • Pinned Semantic Vault • 60fps Braille DAG Lattice
+  </text>
+
+  <!-- Badge bar -->
+  <g transform="translate(360, 520)">
+    <rect width="480" height="42" rx="21" fill="#121622" stroke="rgba(229,192,88,0.3)" stroke-width="1.5" />
+    <text x="240" y="26" font-family="monospace" font-size="14" fill="#E5C058" text-anchor="middle" font-weight="bold">
+      100% CLIENT-SIDE IN-BROWSER UTILITY • ZERO LEAKS • MIT
+    </text>
+  </g>
+
+  <!-- Footer Tag -->
+  <text x="600" y="600" font-family="sans-serif" font-size="14" fill="#64748B" text-anchor="middle">
+    Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
+  </text>
+</svg>

@@ -3,6 +3,10 @@ node_modules/
 .env.*
 *.log
 /data/cot_memory.json
+/data/*.json
+__pycache__/
+*.pyc
+*.pyo
 /vm/iso_root/
 /vm/rootfs/
 /vm/*.iso

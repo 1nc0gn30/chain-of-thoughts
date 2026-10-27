@@ -4,11 +4,14 @@
   "description": "Chain of Thoughts (zoth-cot) — Cryptographic Merkle Working Memory DAG, Automatic Fact Extraction & Multi-Turn Context Engine for Embodied AI Agents (ZothOS & Zoth Studio)",
   "main": "server.js",
   "bin": {
-    "zoth-cot": "./bin/zoth-cot"
+    "zoth-cot": "./bin/zoth-cot",
+    "zoth-cot-mcp": "./bin/zoth-cot-mcp"
   },
   "scripts": {
     "start": "node server.js",
-    "cli": "node ./bin/zoth-cot --tree"
+    "cli": "node ./bin/zoth-cot --tree",
+    "mcp": "./bin/zoth-cot-mcp",
+    "test": "python3 -m unittest discover -s tests -v"
   },
   "keywords": [
     "chain-of-thought",

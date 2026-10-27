@@ -23,9 +23,10 @@ function loadState() {
     maxTurns: 24,
     pinnedFacts: [
       { id: 'fact-operator', category: 'IDENTITY', fact: 'Operator: Neal (@1nc0gn30) • Sovereign AI Workstation.', active: true, ts: new Date().toISOString() },
-      { id: 'fact-engine', category: 'ARCHITECTURE', fact: 'Chain of Thoughts (zoth-cot) Merkle DAG Working Memory Engine.', active: true, ts: new Date().toISOString() }
+      { id: 'fact-engine', category: 'ARCHITECTURE', fact: 'Chain of Thoughts (zoth-cot) Merkle DAG Working Memory Engine.', active: true, ts: new Date().toISOString() },
+      { id: 'fact-security', category: 'SECURITY', fact: 'Strict zero-leak pre-commit rule: EnvGuard active on all repositories.', active: true, ts: new Date().toISOString() }
     ],
-    messages: [],
+    turns: [],
     nodes: [
       {
         id: 'N00',
@@ -33,7 +34,7 @@ function loadState() {
         parentHash: '000000000000',
         prompt: '[GENESIS] Initialize Chain of Thoughts Working Memory DAG',
         steps: {
-          recall: 'Loaded core semantic engrams.',
+          recall: 'Loaded core semantic engrams into vault.',
           contextLink: 'Initialized 24-turn rolling context window.',
           deduction: 'Armed multi-turn LLM router (Ollama + Cloud Providers).',
           synthesis: 'Chain of Thoughts DAG online.'
@@ -55,6 +56,7 @@ const args = process.argv.slice(2);
 const cmd = args[0] || '--tree';
 const rest = args.slice(1).join(' ').trim();
 const state = loadState();
+const turnsList = state.turns || state.messages || [];
 
 if (cmd === '--pin' && rest) {
   state.pinnedFacts.unshift({
@@ -66,14 +68,17 @@ if (cmd === '--pin' && rest) {
   });
   saveState(state);
   console.log(`[◈ CoT] Pinned new working memory fact: "${rest}"`);
+  process.exit(0);
 } else if (cmd === '--clear') {
-  state.messages = [];
+  state.turns = [];
+  if (state.messages) state.messages = [];
   saveState(state);
   console.log('[◈ CoT] Cleared rolling conversation turns (Pinned facts preserved).');
+  process.exit(0);
 } else if (cmd === '--recall' && rest) {
   const q = rest.toLowerCase();
-  const facts = state.pinnedFacts.filter((f) => f.fact.toLowerCase().includes(q));
-  const nodes = state.nodes.filter((n) => JSON.stringify(n).toLowerCase().includes(q));
+  const facts = (state.pinnedFacts || []).filter((f) => f.fact.toLowerCase().includes(q));
+  const nodes = (state.nodes || []).filter((n) => JSON.stringify(n).toLowerCase().includes(q));
   console.log(`╔══[ ◈ CoT RECALL QUERY: "${rest}" ]══════════════════════════════════════════╗`);
   console.log(`║ Matched Facts (${facts.length}):`);
   facts.forEach((f, i) => console.log(`║  [${i + 1}] [${f.category}] ${f.fact}`));
@@ -87,11 +92,11 @@ const lines = [
   '╔══════════════════════════════════════════════════════════════════════════════╗',
   `║ ◈ ZOTH CHAIN OF THOUGHTS (CoT) // WORKING MEMORY DAG (HEAD: ${state.headHash}) ║`,
   '╠══════════════════════════════════════════════════════════════════════════════╣',
-  `║ PINNED SEMANTIC MEMORY FACTS (${state.pinnedFacts.length}):`,
-  ...state.pinnedFacts.slice(0, 8).map((f, i) => `║  [${i + 1}] [${f.category}] ${f.fact.slice(0, 64)}`),
+  `║ PINNED SEMANTIC MEMORY FACTS (${(state.pinnedFacts || []).length}):`,
+  ...(state.pinnedFacts || []).slice(0, 8).map((f, i) => `║  [${i + 1}] [${f.category}] ${f.fact.slice(0, 64)}`),
   '╠══════════════════════════════════════════════════════════════════════════════╣',
-  `║ CRYPTOGRAPHIC REASONING DAG NODES (${state.nodes.length} NODES • ${Math.floor(state.messages.length / 2)} TURNS):`,
-  ...state.nodes.slice(-8).map((n) => [
+  `║ CRYPTOGRAPHIC REASONING DAG NODES (${(state.nodes || []).length} NODES • ${turnsList.length} TURNS):`,
+  ...(state.nodes || []).slice(-8).map((n) => [
     `║  ├─● [${n.id} // ${n.hash}] (◀ ${n.parentHash}) [${n.mood || 'TACTICAL'}]`,
     `║  │   Prompt   : ${(n.prompt || '').slice(0, 58)}`,
     `║  │   1.Recall : ${(n.steps?.recall || '').slice(0, 58)}`,

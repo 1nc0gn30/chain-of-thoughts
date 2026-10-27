@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""
+zoth-cot-mcp — Model Context Protocol (MCP) Server for Chain of Thoughts (zoth-cot)
+Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
+
+Exposes ChainOfThoughts Cryptographic Merkle Working Memory DAG tools over JSON-RPC 2.0 stdio
+to Claude Code, Gemini CLI, Cursor, and Windsurf.
+"""
+
+import sys
+import os
+
+# Insert root directory into Python module search path
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from zoth_cot_mcp import main
+
+if __name__ == "__main__":
+    main()
