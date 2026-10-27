@@ -11,7 +11,7 @@
     "start": "node server.js",
     "cli": "node ./bin/zoth-cot --tree",
     "mcp": "./bin/zoth-cot-mcp",
-    "test": "python3 -m unittest discover -s tests -v"
+    "test": "python3 -B -m unittest discover -s tests -v"
   },
   "keywords": [
     "chain-of-thought",
