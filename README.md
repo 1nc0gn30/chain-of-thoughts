@@ -188,9 +188,8 @@ node server.js
 
 Every tool across the **ZothOS** and **NullAI** ecosystem is **100% free, open, and unlocked by default** with zero paywalls.
 
-- **☕ Buy Us a Coffee (Stripe)**: [https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X](https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X)
 - **◎ Solana Tip Address**: `GG2eQbVh8ut1BK6j1A2tz7pSySdLpD38BgyEhGcxdXoK`
 
 ---
 
-**Engineered by Neal Frazier Tech ([@1nc0gn30](https://github.com/1nc0gn30)) • [NullAI Platform](https://nullai.tech) • [ZothOS](https://zoth.nullai.tech)**
+**Engineered by [1nc0gn30](https://github.com/1nc0gn30) • [NullAI Platform](https://nullai.tech) • [ZothOS](https://zoth.nullai.tech)**
