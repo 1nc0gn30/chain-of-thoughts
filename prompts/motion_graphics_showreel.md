@@ -1,7 +1,7 @@
 # Chain of Thoughts (`zoth-cot`) — 15-Second Motion Graphics Showreel
 
 > Master Motion Design Blueprint for viral social teasers, video heroes, and product launches.
-> Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform.
+> Engineered by 1nc0gn30 (@1nc0gn30) • NullAI Platform.
 
 ---
 
@@ -39,7 +39,7 @@ Scene Breakdown & Exact On-Screen Copy:
   Text: "UNBREAKABLE CONTEXT FOR AUTONOMOUS AGENTS."
 - Scene 6 (0:13 - 0:15): Branded resolve. The gold Merkle Octagon docks cleanly into the NullAI typography lockup.
   Text: "CHAIN OF THOUGHTS (ZOTH-COT)"
-  Subtext: "100% Free & Open Access • nealfrazier.tech • nullai.tech"
+  Subtext: "100% Free & Open Access • nullai.tech • nullai.tech"
 
 Style & Animation Constraints:
 - Background: Pitch obsidian (#060709) with ambient gold mesh gradient (#E5C058 at 12% opacity) and 1-bit Bayer 8x8 paper grain.

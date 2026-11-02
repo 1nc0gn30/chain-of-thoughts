@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 test_zoth_cot.py — Comprehensive Unit Test Suite for Chain of Thoughts (zoth-cot) & MCP Server
-Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
+Engineered by 1nc0gn30 (@1nc0gn30) • NullAI Platform
 
 Tests:
 - Entity extraction (IPs, ports, domains, paths, CVEs, tools)

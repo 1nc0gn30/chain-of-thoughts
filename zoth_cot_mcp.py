@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 zoth_cot_mcp.py — Chain of Thoughts (zoth-cot) Model Context Protocol (MCP) Server
-Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
+Engineered by 1nc0gn30 (@1nc0gn30) • NullAI Platform
 
 Zero-dependency standard-I/O JSON-RPC 2.0 Model Context Protocol server exposing
 the ChainOfThoughts Cryptographic Merkle Working Memory DAG, Automatic Fact & Entity

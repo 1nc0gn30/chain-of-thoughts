@@ -2,7 +2,7 @@
 /**
  * Chain of Thoughts (zoth-cot) — HTTP Server & API (:8145)
  * Cryptographic Merkle Working Memory DAG, Automatic Fact Extraction & Braille DAG Studio
- * Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
+ * Engineered by 1nc0gn30 (@1nc0gn30) • NullAI Platform
  */
 const http = require('http');
 const fs = require('fs');
@@ -41,7 +41,7 @@ function loadState() {
     headHash: genesisHash,
     maxTurns: 24,
     pinnedFacts: [
-      { id: 'fact-1', category: 'IDENTITY', fact: 'Operator callsign: Neal (@1nc0gn30) • Sovereign AI Workstation.', active: true, ts: new Date().toISOString() },
+      { id: 'fact-1', category: 'IDENTITY', fact: 'Operator callsign: 1nc0gn30 (@1nc0gn30) • Sovereign AI Workstation.', active: true, ts: new Date().toISOString() },
       { id: 'fact-2', category: 'ARCHITECTURE', fact: 'Chain of Thoughts (zoth-cot) Merkle DAG Working Memory Engine.', active: true, ts: new Date().toISOString() },
       { id: 'fact-3', category: 'SECURITY', fact: 'Strict zero-leak pre-commit rule: EnvGuard active on all repositories.', active: true, ts: new Date().toISOString() },
       { id: 'fact-4', category: 'INFRASTRUCTURE', fact: 'Dual checkout rails enabled: Stripe Buy Us a Coffee + Solana Tip Wallet.', active: true, ts: new Date().toISOString() }
