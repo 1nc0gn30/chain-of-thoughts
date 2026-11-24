@@ -1176,7 +1176,7 @@
         <div class="brand-symbol" aria-hidden="true">◈</div>
         <div class="brand-title">
           <span>Chain of Thoughts</span>
-          <span class="brand-tag">zoth-cot v1.0</span>
+          <span class="brand-tag">zoth-cot v1.1</span>
         </div>
       </div>
 
@@ -1190,7 +1190,10 @@
         <button id="btnExportJson" class="btn btn-subtle" title="Download working memory state as JSON">
           <span>Export JSON</span>
         </button>
-        <button id="btnImportJson" class="btn btn-subtle" title="Import memory DAG state">
+        <button id="btnExportMd" class="btn btn-subtle" title="Download reasoning trace as Markdown">
+          <span>Export MD</span>
+        </button>
+        <button id="btnImportJson" class="btn btn-subtle" title="Import memory DAG state (Web UI, CLI, or MCP JSON)">
           <span>Import</span>
         </button>
         <input type="file" id="fileInputImport" accept=".json" style="display: none;" aria-label="Upload JSON memory file" />
@@ -1588,9 +1591,23 @@
     'use strict';
 
     // -------------------------------------------------------------
-    // 1. FAST SYNCHRONOUS SHA-256 IMPLEMENTATION
+    // 1. FAST SYNCHRONOUS UTF-8 SAFE SHA-256 & HTML ESCAPING
     // -------------------------------------------------------------
-    function sha256Sync(ascii) {
+    function escapeHtml(raw) {
+      return String(raw == null ? '' : raw).replace(/[&<>"']/g, function (c) {
+        switch (c) {
+          case '&': return '&amp;';
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '"': return '&quot;';
+          case "'": return '&#39;';
+        }
+      });
+    }
+
+    function sha256Sync(input) {
+      // Encode UTF-8 string to Latin-1 byte string so non-ASCII chars never fail
+      var ascii = unescape(encodeURIComponent(String(input || '')));
       function rightRotate(value, amount) {
         return (value >>> amount) | (value << (32 - amount));
       }
@@ -1819,16 +1836,18 @@
     // -------------------------------------------------------------
     // 4. MERKLE REASONING NODE CREATOR
     // -------------------------------------------------------------
-    function createReasoningNode(prompt, role, mood, customSteps) {
+    function createReasoningNode(prompt, role, mood, customSteps, preExtractedEntities) {
       const parentNode = state.nodes[state.nodes.length - 1];
       const parentHash = parentNode ? parentNode.hash : GENESIS_PARENT;
       const nodeIndex = state.nodes.length;
       const nodeId = 'N' + (nodeIndex < 10 ? '0' + nodeIndex : nodeIndex);
       const ts = new Date().toISOString();
 
-      // Extract entities
-      const entities = extractEntities(prompt);
-      checkAutoFactPinning(prompt);
+      // Extract entities only if caller has not already extracted them for this turn
+      const entities = Array.isArray(preExtractedEntities) ? preExtractedEntities : extractEntities(prompt);
+      if (!Array.isArray(preExtractedEntities)) {
+        checkAutoFactPinning(prompt);
+      }
 
       // Generate structured steps if not supplied
       let steps = customSteps;
@@ -1847,13 +1866,14 @@
 
       // Compute Merkle Hash
       const hashPayload = parentHash + nodeId + role + prompt + JSON.stringify(steps) + ts;
-      const fullHash = sha256Sync(hashPayload);
+      const fullHash = sha256Sync(hashPayload) || '000000000000';
       const shortHash = fullHash.slice(0, 12);
 
       const newNode = {
         id: nodeId,
         hash: shortHash,
         parentHash: parentHash,
+        branch: 'main',
         turnIndex: nodeIndex,
         prompt: prompt,
         steps: steps,
@@ -1870,6 +1890,66 @@
       // Auto-select in inspector
       selectNodeInInspector(newNode);
       return newNode;
+    }
+
+    function normalizeImportedState(imported) {
+      const now = new Date().toISOString();
+      const rawFacts = Array.isArray(imported.pinnedFacts)
+        ? imported.pinnedFacts
+        : (Array.isArray(imported.pinned_facts) ? imported.pinned_facts : [...INITIAL_PINNED_FACTS]);
+      const rawTurns = Array.isArray(imported.turns)
+        ? imported.turns
+        : (Array.isArray(imported.messages) ? imported.messages : []);
+      const turns = rawTurns.map((t, idx) => ({
+        index: t.index || (idx + 1),
+        role: t.role || 'user',
+        content: t.content || '',
+        ts: t.ts || t.timestamp || now,
+        entities: Array.isArray(t.entities) ? t.entities : []
+      }));
+      const nodes = imported.nodes.map((n, idx) => ({
+        id: n.id || ('N' + (idx < 10 ? '0' + idx : idx)),
+        hash: n.hash || GENESIS_HASH,
+        parentHash: n.parentHash || n.parent_hash || GENESIS_PARENT,
+        branch: n.branch || 'main',
+        confidence: typeof n.confidence === 'number' ? n.confidence : null,
+        tags: Array.isArray(n.tags) ? n.tags : [],
+        turnIndex: idx,
+        prompt: n.prompt || n.thought || '',
+        steps: {
+          recall: n.steps?.recall || 'Imported reasoning node.',
+          contextLink: n.steps?.contextLink || n.steps?.context_link || ('Branch: ' + (n.branch || 'main')),
+          deduction: n.steps?.deduction || (n.phase || n.mood || 'REASONING'),
+          synthesis: n.steps?.synthesis || (n.thought || n.prompt || '')
+        },
+        mood: n.mood || n.phase || 'TACTICAL',
+        tokens: n.tokens || 64,
+        timestamp: n.timestamp || now,
+        entities: Array.isArray(n.entities) ? n.entities : []
+      }));
+      const entities = {};
+      if (imported.entities && typeof imported.entities === 'object') {
+        const typeBuckets = { ips: 'ipv4', ports: 'port', domains: 'domain', paths: 'path', cves: 'cve', tools: 'tools' };
+        Object.entries(imported.entities).forEach(([k, v]) => {
+          if (Array.isArray(v) && typeBuckets[k]) {
+            const t = typeBuckets[k];
+            v.forEach(val => {
+              const key = t + ':' + String(val).toLowerCase();
+              entities[key] = { type: t, value: String(val), count: 1, firstSeen: now, lastSeen: now };
+            });
+          } else if (v && typeof v === 'object' && v.type && v.value) {
+            entities[k] = v;
+          }
+        });
+      }
+      return {
+        headHash: imported.headHash || imported.head_hash || (nodes[nodes.length - 1]?.hash || GENESIS_HASH),
+        maxTurns: imported.maxTurns || imported.max_turns || 24,
+        pinnedFacts: rawFacts,
+        turns,
+        nodes,
+        entities
+      };
     }
 
     // -------------------------------------------------------------
@@ -1921,9 +2001,15 @@
 
     function getNodeCoordinates(index, total) {
       const spacingX = 175;
+      const n = state.nodes[index];
+      const branchNames = [];
+      state.nodes.forEach(item => {
+        const b = item.branch || 'main';
+        if (!branchNames.includes(b)) branchNames.push(b);
+      });
+      const branchIdx = n ? Math.max(0, branchNames.indexOf(n.branch || 'main')) : 0;
       const x = index * spacingX + 80;
-      // Stagger slight curve for natural DAG flow
-      const y = Math.sin(index * 0.6) * 35;
+      const y = (branchIdx === 0 ? Math.sin(index * 0.6) * 35 : (branchIdx % 2 === 1 ? -1 : 1) * Math.ceil(branchIdx / 2) * 95);
       return { x, y };
     }
 
@@ -1953,12 +2039,15 @@
         });
       }
 
-      // 2. Draw Directed DAG Edges (Parent -> Child)
+      // 2. Draw Directed DAG Edges (True Parent Hash -> Child)
       const nodes = state.nodes;
+      const hashToIdx = new Map();
+      nodes.forEach((node, idx) => { hashToIdx.set(node.hash, idx); });
       for (let i = 0; i < nodes.length; i++) {
         const currCoord = getNodeCoordinates(i, nodes.length);
         if (i > 0) {
-          const prevCoord = getNodeCoordinates(i - 1, nodes.length);
+          const pIdx = hashToIdx.has(nodes[i].parentHash) ? hashToIdx.get(nodes[i].parentHash) : (i - 1);
+          const prevCoord = getNodeCoordinates(pIdx, nodes.length);
 
           // Bezier Edge
           ctx.beginPath();
@@ -2335,16 +2424,16 @@
         item.innerHTML = `
           <div class="fact-left">
             <div class="fact-header-row">
-              <span class="badge-category">${fact.category}</span>
+              <span class="badge-category">${escapeHtml(fact.category)}</span>
               <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted);">${new Date(fact.ts).toLocaleTimeString()}</span>
             </div>
-            <div class="fact-text">${fact.fact}</div>
+            <div class="fact-text">${escapeHtml(fact.fact)}</div>
           </div>
           <div class="fact-actions">
-            <button class="btn-icon-tiny btn-toggle-fact" data-id="${fact.id}" title="${fact.active ? 'Unpin fact' : 'Pin fact'}">
+            <button class="btn-icon-tiny btn-toggle-fact" data-id="${escapeHtml(fact.id)}" title="${fact.active ? 'Unpin fact' : 'Pin fact'}">
               ${fact.active ? '★' : '☆'}
             </button>
-            <button class="btn-icon-tiny btn-del-fact" data-id="${fact.id}" title="Delete fact" style="color: var(--accent-red);">
+            <button class="btn-icon-tiny btn-del-fact" data-id="${escapeHtml(fact.id)}" title="Delete fact" style="color: var(--accent-red);">
               ✕
             </button>
           </div>
@@ -2392,12 +2481,12 @@
         const badgeClass = 'badge-entity badge-' + e.type;
 
         tr.innerHTML = `
-          <td><span class="${badgeClass}">${e.type.toUpperCase()}</span></td>
-          <td><strong style="font-family: var(--font-mono);">${e.value}</strong></td>
-          <td><span style="font-family: var(--font-mono); color: var(--gold-primary);">${e.count}x</span></td>
+          <td><span class="${escapeHtml(badgeClass)}">${escapeHtml(e.type.toUpperCase())}</span></td>
+          <td><strong style="font-family: var(--font-mono);">${escapeHtml(e.value)}</strong></td>
+          <td><span style="font-family: var(--font-mono); color: var(--gold-primary);">${Number(e.count) || 1}x</span></td>
           <td style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">${new Date(e.firstSeen).toLocaleTimeString()}</td>
           <td>
-            <button class="btn btn-subtle btn-pin-entity" data-val="${e.value}" data-type="${e.type}" style="padding: 0.2rem 0.5rem; min-height: 28px; font-size: 0.72rem;">
+            <button class="btn btn-subtle btn-pin-entity" data-val="${escapeHtml(e.value)}" data-type="${escapeHtml(e.type)}" style="padding: 0.2rem 0.5rem; min-height: 28px; font-size: 0.72rem;">
               + Pin Fact
             </button>
           </td>
@@ -2445,14 +2534,14 @@
         const bubble = document.createElement('div');
         bubble.className = 'turn-message-bubble ' + t.role;
 
-        const entitiesHtml = (t.entities || []).map(ent => `<span class="badge-category">${ent}</span>`).join('');
+        const entitiesHtml = (t.entities || []).map(ent => `<span class="badge-category">${escapeHtml(ent)}</span>`).join('');
 
         bubble.innerHTML = `
           <div class="bubble-meta">
-            <span class="bubble-role">${t.role}</span>
-            <span>Turn #${t.index} • ${new Date(t.ts).toLocaleTimeString()}</span>
+            <span class="bubble-role">${escapeHtml(t.role)}</span>
+            <span>Turn #${Number(t.index) || 0} • ${new Date(t.ts).toLocaleTimeString()}</span>
           </div>
-          <div class="bubble-content">${t.content}</div>
+          <div class="bubble-content">${escapeHtml(t.content)}</div>
           ${entitiesHtml ? `<div class="bubble-entities">${entitiesHtml}</div>` : ''}
         `;
         container.appendChild(bubble);
@@ -2537,8 +2626,8 @@
             entities: entities.map(e => e.value)
           });
 
-          // Generate DAG reasoning node
-          createReasoningNode(content, activeRole, mood);
+          // Generate DAG reasoning node (pass pre-extracted entities to avoid double-counting)
+          createReasoningNode(content, activeRole, mood, null, entities);
 
           if (ta) ta.value = '';
           showToast(`Turn #${turnIndex} committed & analyzed!`);
@@ -2692,15 +2781,15 @@
         });
       }
 
-      // Verify Merkle Hashes
+      // Verify Merkle Hashes (DAG-aware: supports branched parent linkages)
       const btnVerifyMerkle = document.getElementById('btnVerifyMerkle');
       if (btnVerifyMerkle) {
         btnVerifyMerkle.addEventListener('click', () => {
-          let valid = true;
+          const knownHashes = new Set(state.nodes.map(n => n.hash));
+          let valid = state.nodes.length > 0 && knownHashes.has(state.headHash);
           for (let i = 1; i < state.nodes.length; i++) {
             const curr = state.nodes[i];
-            const prev = state.nodes[i - 1];
-            if (curr.parentHash !== prev.hash) {
+            if (!curr.parentHash || !knownHashes.has(curr.parentHash)) {
               valid = false;
               break;
             }
@@ -2765,7 +2854,27 @@
         });
       }
 
-      // Import JSON
+      // Export Markdown
+      const btnExportMd = document.getElementById('btnExportMd');
+      if (btnExportMd) {
+        btnExportMd.addEventListener('click', () => {
+          const prevFormat = currentFormat;
+          currentFormat = 'markdown';
+          const md = compileSystemPrompt();
+          currentFormat = prevFormat;
+          compileSystemPrompt();
+          const blob = new Blob([md + '\n'], { type: 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `zoth_cot_trace_${Date.now()}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Exported reasoning trace as Markdown!');
+        });
+      }
+
+      // Import JSON (supports Web UI, CLI, and MCP cot_memory.json schemas)
       const btnImport = document.getElementById('btnImportJson');
       const fileInput = document.getElementById('fileInputImport');
       if (btnImport && fileInput) {
@@ -2780,8 +2889,9 @@
             try {
               const imported = JSON.parse(evt.target.result);
               if (imported && Array.isArray(imported.nodes)) {
-                state = imported;
+                state = normalizeImportedState(imported);
                 saveState();
+                selectNodeInInspector(state.nodes[state.nodes.length - 1] || state.nodes[0]);
                 showToast(`Successfully imported ${state.nodes.length} memory nodes!`);
               } else {
                 showToast('Invalid memory state JSON structure.');

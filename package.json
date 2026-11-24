@@ -1,6 +1,6 @@
 {
   "name": "chain-of-thoughts",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Chain of Thoughts (zoth-cot) — Cryptographic Merkle Working Memory DAG, Automatic Fact Extraction & Multi-Turn Context Engine for Embodied AI Agents (ZothOS & Zoth Studio)",
   "main": "server.js",
   "bin": {

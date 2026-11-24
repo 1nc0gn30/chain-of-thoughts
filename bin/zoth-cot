@@ -2,108 +2,912 @@
 /**
  * zoth-cot — Chain of Thoughts CLI (Cryptographic Merkle Working Memory DAG)
  * Engineered by 1nc0gn30 (@1nc0gn30) • NullAI Platform
+ *
+ * Zero-dependency CLI sharing the unified cot_memory.json format with zoth_cot_mcp.py and server.js.
  */
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const STATE_FILE = path.join(DATA_DIR, 'cot_memory.json');
+const CLI_VERSION = '1.1.0';
+const GENESIS_SEED = 'ZOTH-COT-GENESIS';
+const VALID_ROLES = new Set(['user', 'assistant', 'system']);
 
-function loadState() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (fs.existsSync(STATE_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    } catch (_e) {}
-  }
-  const genesisHash = crypto.createHash('sha256').update('ZOTH-COT-GENESIS').digest('hex').slice(0, 12);
+const KNOWN_TOOLS = [
+  'nmap', 'wireshark', 'metasploit', 'burpsuite', 'sqlmap', 'nikto', 'hydra',
+  'john', 'aircrack-ng', 'ghidra', 'radare2', 'gitleaks', 'ollama', 'neovim',
+  'tmux', 'ripgrep', 'curl', 'wget', 'docker', 'git', 'python3', 'tcpdump',
+  'ffuf', 'gobuster', 'hashcat', 'socat', 'netcat', 'tshark', 'masscan',
+  'rustc', 'cargo', 'zoth-envguard', 'zoth-ghostbyte', 'zoth-hexstrike',
+  'zoth-cot', 'zoth-comm', 'zoth-capsule-jail', 'zoth-node-lite', 'zoth-braille-art'
+];
+
+function computeGenesisHash() {
+  return crypto.createHash('sha256').update(GENESIS_SEED).digest('hex').slice(0, 12);
+}
+
+function computeNodeHash(prevHash, thought, phase, timestamp, branch = 'main', version = 2) {
+  const payload = version >= 2
+    ? `v2|${prevHash}|${branch}|${phase}|${thought}|${timestamp}`
+    : `${prevHash}|${thought}|${phase}|${timestamp}`;
+  return crypto.createHash('sha256').update(payload, 'utf8').digest('hex').slice(0, 12);
+}
+
+function parseNodeIndex(nodeId) {
+  const m = /^N(\d+)$/i.exec(String(nodeId || '').trim());
+  return m ? Number(m[1]) : -1;
+}
+
+function defaultState() {
+  const genesisHash = computeGenesisHash();
+  const now = new Date().toISOString();
+  const operatorLabel = process.env.ZOTH_COT_OPERATOR ||
+    'Operator callsign: 1nc0gn30 (@1nc0gn30) • Sovereign AI Workstation.';
+  const facts = [
+    { id: 'fact-operator', category: 'IDENTITY', fact: operatorLabel, active: true, ts: now },
+    { id: 'fact-engine', category: 'ARCHITECTURE', fact: 'Chain of Thoughts (zoth-cot) Merkle DAG Working Memory Engine.', active: true, ts: now }
+  ];
+  const nodes = [
+    {
+      id: 'N00',
+      hash: genesisHash,
+      parent_hash: '000000000000',
+      parentHash: '000000000000',
+      branch: 'main',
+      thought: '[GENESIS] Initialize Chain of Thoughts Working Memory DAG',
+      prompt: '[GENESIS] Initialize Chain of Thoughts Working Memory DAG',
+      phase: 'GENESIS',
+      tags: ['genesis'],
+      confidence: 1.0,
+      steps: {
+        recall: 'Loaded core semantic engrams into vault.',
+        context_link: 'Initialized 24-turn rolling context window.',
+        contextLink: 'Initialized 24-turn rolling context window.',
+        deduction: 'Armed multi-turn LLM router (Ollama + Cloud Providers).',
+        synthesis: 'Chain of Thoughts DAG online.'
+      },
+      mood: 'TACTICAL',
+      tokens: 64,
+      hash_version: 0,
+      timestamp: now
+    }
+  ];
   return {
     headHash: genesisHash,
+    head_hash: genesisHash,
+    activeBranch: 'main',
+    active_branch: 'main',
+    branches: { main: genesisHash },
+    nextNodeIndex: 1,
+    next_node_index: 1,
     maxTurns: 24,
-    pinnedFacts: [
-      { id: 'fact-operator', category: 'IDENTITY', fact: 'Operator: 1nc0gn30 (@1nc0gn30) • Sovereign AI Workstation.', active: true, ts: new Date().toISOString() },
-      { id: 'fact-engine', category: 'ARCHITECTURE', fact: 'Chain of Thoughts (zoth-cot) Merkle DAG Working Memory Engine.', active: true, ts: new Date().toISOString() },
-      { id: 'fact-security', category: 'SECURITY', fact: 'Strict zero-leak pre-commit rule: EnvGuard active on all repositories.', active: true, ts: new Date().toISOString() }
-    ],
+    max_turns: 24,
+    pinnedFacts: facts,
+    pinned_facts: facts,
+    messages: [],
     turns: [],
-    nodes: [
-      {
-        id: 'N00',
-        hash: genesisHash,
-        parentHash: '000000000000',
-        prompt: '[GENESIS] Initialize Chain of Thoughts Working Memory DAG',
-        steps: {
-          recall: 'Loaded core semantic engrams into vault.',
-          contextLink: 'Initialized 24-turn rolling context window.',
-          deduction: 'Armed multi-turn LLM router (Ollama + Cloud Providers).',
-          synthesis: 'Chain of Thoughts DAG online.'
-        },
-        mood: 'TACTICAL',
-        tokens: 64,
-        timestamp: new Date().toISOString()
-      }
-    ]
+    nodes,
+    entities: { ips: [], ports: [], domains: [], paths: [], cves: [], tools: [] },
+    checkpoints: [],
+    last_checkpoint: null
   };
 }
 
-function saveState(state) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
-}
+function normalizeState(raw) {
+  const base = defaultState();
+  if (!raw || typeof raw !== 'object') return base;
 
-const args = process.argv.slice(2);
-const cmd = args[0] || '--tree';
-const rest = args.slice(1).join(' ').trim();
-const state = loadState();
-const turnsList = state.turns || state.messages || [];
+  const headHash = raw.headHash || raw.head_hash || base.headHash;
+  const activeBranch = raw.activeBranch || raw.active_branch || 'main';
+  const maxTurns = Number(raw.maxTurns || raw.max_turns || 24);
+  const pinnedFacts = Array.isArray(raw.pinnedFacts)
+    ? raw.pinnedFacts
+    : (Array.isArray(raw.pinned_facts) ? raw.pinned_facts : base.pinnedFacts);
+  const messages = Array.isArray(raw.messages)
+    ? raw.messages
+    : (Array.isArray(raw.turns) ? raw.turns : []);
 
-if (cmd === '--pin' && rest) {
-  state.pinnedFacts.unshift({
-    id: 'fact-' + Date.now().toString(36),
-    category: 'PINNED',
-    fact: rest,
-    active: true,
-    ts: new Date().toISOString()
+  let maxIdx = 0;
+  const rawNodes = Array.isArray(raw.nodes) && raw.nodes.length > 0 ? raw.nodes : base.nodes;
+  const nodes = rawNodes.map((n) => {
+    const node = Object.assign({}, n);
+    if (node.parentHash && !node.parent_hash) node.parent_hash = node.parentHash;
+    if (node.parent_hash && !node.parentHash) node.parentHash = node.parent_hash;
+    if (node.prompt && !node.thought) node.thought = node.prompt;
+    if (node.thought && !node.prompt) node.prompt = node.thought;
+    if (!node.phase) node.phase = node.mood || 'REASONING';
+    if (!node.branch) node.branch = 'main';
+    if (!Array.isArray(node.tags)) node.tags = [];
+    const idx = parseNodeIndex(node.id);
+    if (idx > maxIdx) maxIdx = idx;
+    return node;
   });
-  saveState(state);
-  console.log(`[◈ CoT] Pinned new working memory fact: "${rest}"`);
-  process.exit(0);
-} else if (cmd === '--clear') {
-  state.turns = [];
-  if (state.messages) state.messages = [];
-  saveState(state);
-  console.log('[◈ CoT] Cleared rolling conversation turns (Pinned facts preserved).');
-  process.exit(0);
-} else if (cmd === '--recall' && rest) {
-  const q = rest.toLowerCase();
-  const facts = (state.pinnedFacts || []).filter((f) => f.fact.toLowerCase().includes(q));
-  const nodes = (state.nodes || []).filter((n) => JSON.stringify(n).toLowerCase().includes(q));
-  console.log(`╔══[ ◈ CoT RECALL QUERY: "${rest}" ]══════════════════════════════════════════╗`);
-  console.log(`║ Matched Facts (${facts.length}):`);
-  facts.forEach((f, i) => console.log(`║  [${i + 1}] [${f.category}] ${f.fact}`));
-  console.log(`║ Matched Thought Nodes (${nodes.length}):`);
-  nodes.forEach((n) => console.log(`║  • [${n.id} // ${n.hash}] ${n.prompt} -> ${n.steps?.synthesis || ''}`));
-  console.log('╚══════════════════════════════════════════════════════════════════════════════╝');
-  process.exit(0);
+
+  const nextNodeIndex = Math.max(
+    Number(raw.nextNodeIndex || raw.next_node_index || 0),
+    maxIdx + 1,
+    nodes.length
+  );
+
+  let branches = {};
+  if (raw.branches && typeof raw.branches === 'object' && Object.keys(raw.branches).length > 0) {
+    branches = Object.assign({}, raw.branches);
+  } else {
+    nodes.forEach((n) => { branches[n.branch || 'main'] = n.hash; });
+  }
+  if (!branches[activeBranch]) branches[activeBranch] = headHash;
+
+  const entities = { ips: [], ports: [], domains: [], paths: [], cves: [], tools: [] };
+  if (raw.entities && typeof raw.entities === 'object') {
+    for (const k of Object.keys(entities)) {
+      if (Array.isArray(raw.entities[k])) {
+        entities[k] = Array.from(new Set(raw.entities[k].map(String))).sort();
+      }
+    }
+  }
+
+  const checkpoints = Array.isArray(raw.checkpoints) ? raw.checkpoints : [];
+  const last_checkpoint = checkpoints.length > 0 ? checkpoints[checkpoints.length - 1] : null;
+
+  return {
+    headHash,
+    head_hash: headHash,
+    activeBranch,
+    active_branch: activeBranch,
+    branches,
+    nextNodeIndex,
+    next_node_index: nextNodeIndex,
+    maxTurns,
+    max_turns: maxTurns,
+    pinnedFacts,
+    pinned_facts: pinnedFacts,
+    messages,
+    turns: messages,
+    nodes,
+    entities,
+    checkpoints,
+    last_checkpoint
+  };
 }
 
-const lines = [
-  '╔══════════════════════════════════════════════════════════════════════════════╗',
-  `║ ◈ ZOTH CHAIN OF THOUGHTS (CoT) // WORKING MEMORY DAG (HEAD: ${state.headHash}) ║`,
-  '╠══════════════════════════════════════════════════════════════════════════════╣',
-  `║ PINNED SEMANTIC MEMORY FACTS (${(state.pinnedFacts || []).length}):`,
-  ...(state.pinnedFacts || []).slice(0, 8).map((f, i) => `║  [${i + 1}] [${f.category}] ${f.fact.slice(0, 64)}`),
-  '╠══════════════════════════════════════════════════════════════════════════════╣',
-  `║ CRYPTOGRAPHIC REASONING DAG NODES (${(state.nodes || []).length} NODES • ${turnsList.length} TURNS):`,
-  ...(state.nodes || []).slice(-8).map((n) => [
-    `║  ├─● [${n.id} // ${n.hash}] (◀ ${n.parentHash}) [${n.mood || 'TACTICAL'}]`,
-    `║  │   Prompt   : ${(n.prompt || '').slice(0, 58)}`,
-    `║  │   1.Recall : ${(n.steps?.recall || '').slice(0, 58)}`,
-    `║  │   2.Link   : ${(n.steps?.contextLink || '').slice(0, 58)}`,
-    `║  │   3.Deduct : ${(n.steps?.deduction || '').slice(0, 58)}`,
-    `║  │   4.Synth  : ${(n.steps?.synthesis || '').slice(0, 58)}`
-  ].join('\n')),
-  '╚══════════════════════════════════════════════════════════════════════════════╝'
-];
-console.log(lines.join('\n'));
+function loadState(stateFile) {
+  if (fs.existsSync(stateFile)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      return normalizeState(parsed);
+    } catch (_e) {}
+  }
+  return defaultState();
+}
+
+function saveState(stateFile, state) {
+  const dir = path.dirname(path.resolve(stateFile));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const payload = Object.assign({}, state, {
+    headHash: state.headHash,
+    head_hash: state.headHash,
+    activeBranch: state.activeBranch,
+    active_branch: state.activeBranch,
+    nextNodeIndex: state.nextNodeIndex,
+    next_node_index: state.nextNodeIndex,
+    maxTurns: state.maxTurns,
+    max_turns: state.maxTurns,
+    pinnedFacts: state.pinnedFacts,
+    pinned_facts: state.pinnedFacts,
+    messages: state.messages,
+    turns: state.messages,
+    updated_at: new Date().toISOString()
+  });
+  const tmpPath = `${stateFile}.tmp.${process.pid}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+  fs.renameSync(tmpPath, stateFile);
+}
+
+function findNode(state, ref) {
+  const needle = String(ref || '').trim().toLowerCase();
+  if (!needle) return null;
+  for (const n of state.nodes) {
+    if (String(n.id || '').toLowerCase() === needle || String(n.hash || '').toLowerCase() === needle) {
+      return n;
+    }
+  }
+  const prefixMatches = state.nodes.filter((n) => String(n.hash || '').toLowerCase().startsWith(needle));
+  return prefixMatches.length === 1 ? prefixMatches[0] : null;
+}
+
+function extractEntities(state, text) {
+  const p = String(text || '');
+  const found = { ips: new Set(), ports: new Set(), domains: new Set(), paths: new Set(), cves: new Set(), tools: new Set() };
+  if (!p.trim()) return { ips: [], ports: [], domains: [], paths: [], cves: [], tools: [] };
+
+  const ipRe = /\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b/g;
+  for (const m of p.matchAll(ipRe)) found.ips.add(m[0]);
+
+  const portRe = /(?::|(?:\b(?:port|ports|tcp|udp)\s*[:=/]?\s*))(\d{1,5})\b/gi;
+  for (const m of p.matchAll(portRe)) {
+    const val = Number(m[1]);
+    if (val >= 1 && val <= 65535) found.ports.add(String(val));
+  }
+
+  const cveRe = /\bCVE-\d{4}-\d{4,7}\b/gi;
+  for (const m of p.matchAll(cveRe)) found.cves.add(m[0].toUpperCase());
+
+  const noUrls = p.replace(/[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s"'<>]+/g, ' ');
+  const pathRe = /(?:(?<![a-zA-Z0-9_./])\/(?:[a-zA-Z0-9_\-.]+\/)+[a-zA-Z0-9_\-.]+|(?:\.\/|\.\.\/)[a-zA-Z0-9_\-./]+)/g;
+  for (const m of noUrls.matchAll(pathRe)) {
+    const c = m[0].replace(/[.,:;!?)"'>]+$/, '');
+    if (!c.startsWith('//') && c.length > 2) found.paths.add(c);
+  }
+
+  const domainRe = /\b(?!(?:\d{1,3}\.){3}\d{1,3})(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+(?:com|org|net|edu|gov|io|tech|pro|ai|dev|app|co|xyz|me|info|biz|cloud|network|site|mil)\b/gi;
+  for (const m of p.matchAll(domainRe)) found.domains.add(m[0].toLowerCase());
+
+  const lower = p.toLowerCase();
+  for (const tool of KNOWN_TOOLS) {
+    const escaped = tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`).test(lower)) found.tools.add(tool);
+  }
+
+  const out = {};
+  for (const k of Object.keys(found)) {
+    const arr = Array.from(found[k]).sort();
+    out[k] = arr;
+    state.entities[k] = Array.from(new Set([...(state.entities[k] || []), ...arr])).sort();
+  }
+  return out;
+}
+
+function verifyChain(state) {
+  const issues = [];
+  const hashMap = new Map();
+  for (const n of state.nodes) {
+    if (!n.hash) {
+      issues.push(`Node ${n.id} is missing a hash`);
+      continue;
+    }
+    if (hashMap.has(n.hash)) {
+      issues.push(`Duplicate node hash detected: ${n.hash}`);
+    }
+    hashMap.set(n.hash, n);
+  }
+  if (state.nodes.length === 0) {
+    issues.push('DAG contains zero nodes');
+  } else {
+    const genesis = state.nodes[0];
+    const gp = genesis.parent_hash || genesis.parentHash;
+    if (gp !== '000000000000') {
+      issues.push(`Genesis node ${genesis.id} has unexpected parent ${gp}`);
+    }
+    for (let i = 1; i < state.nodes.length; i++) {
+      const n = state.nodes[i];
+      const parent = n.parent_hash || n.parentHash;
+      if (!parent || !hashMap.has(parent)) {
+        issues.push(`Broken parent link on ${n.id} (${n.hash}): parent ${parent} not found`);
+      }
+      if (n.hash_version === 2) {
+        const expected = computeNodeHash(
+          parent || '',
+          n.thought || n.prompt || '',
+          n.phase || 'REASONING',
+          n.timestamp || '',
+          n.branch || 'main',
+          2
+        );
+        if (expected !== n.hash) {
+          issues.push(`Hash tampering detected on ${n.id}: expected ${expected}, got ${n.hash}`);
+        }
+      }
+    }
+  }
+  if (!hashMap.has(state.headHash)) {
+    issues.push(`Active head_hash '${state.headHash}' does not exist in DAG`);
+  }
+  for (const [bname, bhash] of Object.entries(state.branches || {})) {
+    if (!hashMap.has(bhash)) {
+      issues.push(`Branch '${bname}' head '${bhash}' does not exist in DAG`);
+    }
+  }
+  return {
+    valid: issues.length === 0,
+    checked_nodes: state.nodes.length,
+    branch_count: Object.keys(state.branches || {}).length,
+    head_hash: state.headHash,
+    issues
+  };
+}
+
+function getStats(state) {
+  const phases = {};
+  const branches = {};
+  const tags = {};
+  const confs = [];
+  let revised = 0;
+
+  for (const n of state.nodes) {
+    const ph = String(n.phase || 'REASONING').toUpperCase();
+    phases[ph] = (phases[ph] || 0) + 1;
+    const br = String(n.branch || 'main');
+    branches[br] = (branches[br] || 0) + 1;
+    for (const t of (n.tags || [])) tags[t] = (tags[t] || 0) + 1;
+    if (typeof n.confidence === 'number') confs.push(n.confidence);
+    if (n.revises) revised++;
+  }
+
+  const activeFacts = state.pinnedFacts.filter((f) => f.active !== false);
+  const totalChars =
+    activeFacts.reduce((s, f) => s + String(f.fact || '').length, 0) +
+    state.messages.reduce((s, m) => s + String(m.content || '').length, 0) +
+    state.nodes.reduce((s, n) => s + String(n.thought || n.prompt || '').length, 0);
+
+  const entCounts = {};
+  let entTotal = 0;
+  for (const [k, arr] of Object.entries(state.entities || {})) {
+    const c = Array.isArray(arr) ? arr.length : 0;
+    entCounts[k] = c;
+    entTotal += c;
+  }
+
+  const v = verifyChain(state);
+  return {
+    head_hash: state.headHash,
+    active_branch: state.activeBranch,
+    node_count: state.nodes.length,
+    branch_count: Object.keys(state.branches || {}).length,
+    revised_node_count: revised,
+    message_count: state.messages.length,
+    turn_count: Math.floor(state.messages.length / 2),
+    checkpoint_count: (state.checkpoints || []).length,
+    facts: {
+      total: state.pinnedFacts.length,
+      active: activeFacts.length,
+      inactive: state.pinnedFacts.length - activeFacts.length
+    },
+    entities: entCounts,
+    entities_total: entTotal,
+    phases,
+    branches,
+    tags,
+    avg_confidence: confs.length ? Number((confs.reduce((a, b) => a + b, 0) / confs.length).toFixed(4)) : null,
+    est_tokens: Math.max(48, Math.round(totalChars / 3.8)),
+    merkle_valid: v.valid
+  };
+}
+
+function compileSystemPrompt(state, basePrompt = '') {
+  const activeFacts = state.pinnedFacts.filter((f) => f.active !== false);
+  const factsBlock = activeFacts.length
+    ? activeFacts.map((f) => `- [${f.category || 'FACT'}] ${f.fact}`).join('\n')
+    : '- No active pinned memory facts.';
+
+  const entityLines = [];
+  for (const cat of ['ips', 'ports', 'domains', 'paths', 'cves', 'tools']) {
+    const vals = state.entities[cat] || [];
+    if (vals.length) entityLines.push(`- ${cat.toUpperCase()}: ${vals.join(', ')}`);
+  }
+  const entitiesBlock = entityLines.length ? entityLines.join('\n') : '- No active technical entities extracted.';
+  const chkBlock = state.last_checkpoint
+    ? state.last_checkpoint.summary
+    : 'Genesis working memory baseline. No checkpoint compression applied yet.';
+  const recentNodes = state.nodes.slice(-5).map((n) => {
+    const confStr = typeof n.confidence === 'number' ? ` conf=${n.confidence.toFixed(2)}` : '';
+    return `- [${n.id} // ${n.hash}] (${n.phase || 'REASONING'}@${n.branch || 'main'}${confStr}): ${String(n.thought || n.prompt || '').slice(0, 70)}`;
+  }).join('\n');
+
+  const block = [
+    '<CHAIN_OF_THOUGHTS_MEMORY>',
+    `HEAD_HASH: ${state.headHash} | BRANCH: ${state.activeBranch}`,
+    `TOTAL_NODES: ${state.nodes.length} | CONVERSATION_TURNS: ${Math.floor(state.messages.length / 2)}`,
+    '',
+    '[PINNED FACTS]',
+    factsBlock,
+    '',
+    '[EXTRACTED ENTITIES]',
+    entitiesBlock,
+    '',
+    '[ROLLING CHECKPOINT]',
+    chkBlock,
+    '',
+    '[RECENT REASONING CHAIN]',
+    recentNodes,
+    '',
+    '[CONTINUITY DIRECTIVE]',
+    'You are connected to the ZothOS Chain of Thoughts (zoth-cot) Working Memory DAG.',
+    'ALWAYS preserve context continuity from prior turns, recall operator codenames, active targets,',
+    'and pinned facts with zero amnesia.',
+    '</CHAIN_OF_THOUGHTS_MEMORY>'
+  ].join('\n');
+
+  return basePrompt.trim() ? `${basePrompt.trim()}\n\n${block}` : block;
+}
+
+function exportTrace(state, fmt = 'markdown') {
+  const norm = String(fmt || 'markdown').toLowerCase();
+  if (norm === 'json') {
+    return JSON.stringify({
+      head_hash: state.headHash,
+      active_branch: state.activeBranch,
+      branches: state.branches,
+      verification: verifyChain(state),
+      stats: getStats(state),
+      pinned_facts: state.pinnedFacts,
+      entities: state.entities,
+      nodes: state.nodes,
+      checkpoints: state.checkpoints,
+      messages: state.messages,
+      exported_at: new Date().toISOString()
+    }, null, 2);
+  }
+  if (norm !== 'markdown' && norm !== 'md') {
+    throw new Error(`Unsupported export format '${fmt}'. Use 'markdown' or 'json'.`);
+  }
+  const v = verifyChain(state);
+  const lines = [
+    `# Chain of Thoughts Trace (\`${state.headHash}\`)`,
+    '',
+    `- **Active Branch**: \`${state.activeBranch}\``,
+    `- **Nodes**: ${state.nodes.length} | **Branches**: ${Object.keys(state.branches).length} | **Turns**: ${Math.floor(state.messages.length / 2)}`,
+    `- **Merkle Integrity**: ${v.valid ? 'VALID' : `INVALID (${v.issues.length} issues)`}`,
+    '',
+    '## Pinned Facts'
+  ];
+  if (state.pinnedFacts.length) {
+    state.pinnedFacts.forEach((f) => {
+      lines.push(`- \`[${f.category || 'PINNED'}]\` (${f.active !== false ? 'active' : 'inactive'}, \`${f.id}\`): ${f.fact}`);
+    });
+  } else {
+    lines.push('- None');
+  }
+  lines.push('', '## Extracted Entities');
+  let anyEnt = false;
+  for (const cat of ['ips', 'ports', 'domains', 'paths', 'cves', 'tools']) {
+    const vals = state.entities[cat] || [];
+    if (vals.length) {
+      anyEnt = true;
+      lines.push(`- **${cat.toUpperCase()}**: ${vals.map((x) => `\`${x}\``).join(', ')}`);
+    }
+  }
+  if (!anyEnt) lines.push('- None');
+
+  lines.push('', '## Reasoning DAG');
+  for (const n of state.nodes) {
+    const bits = [`branch=\`${n.branch || 'main'}\``, `phase=\`${n.phase || 'REASONING'}\``, `parent=\`${n.parent_hash || n.parentHash}\``];
+    if (typeof n.confidence === 'number') bits.push(`confidence=${n.confidence.toFixed(2)}`);
+    if (n.tags && n.tags.length) bits.push(`tags=${n.tags.map((t) => `\`${t}\``).join(',')}`);
+    if (n.revises) bits.push(`revises=\`${n.revises}\``);
+    if (n.superseded_by) bits.push(`superseded_by=\`${n.superseded_by}\``);
+    lines.push(`- **${n.id}** (\`${n.hash}\`) [${bits.join(', ')}]: ${n.thought || n.prompt || ''}`);
+  }
+  if (state.messages.length) {
+    lines.push('', '## Conversation Turns');
+    for (const m of state.messages) {
+      lines.push(`- **${String(m.role || 'user').toUpperCase()}** (\`${m.id || ''}\`): ${m.content || ''}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+function printHelp() {
+  console.log(`zoth-cot v${CLI_VERSION} — Chain of Thoughts Cryptographic Merkle Working Memory DAG CLI
+
+Usage:
+  zoth-cot [command] [options]
+
+Commands:
+  --tree                       Display Merkle DAG, branches, and pinned facts (default)
+  --pin <fact>                 Pin a fact (--category <CAT>)
+  --unpin <fact_id>            Deactivate a pinned fact (--delete to permanently remove)
+  --step <thought>             Append a DAG reasoning step
+                               Options: --phase <PHASE> --branch <NAME> --parent <ID|HASH>
+                                        --tag <t1,t2> --confidence <0.0-1.0> --revises <ID|HASH>
+  --turn <content>             Record a conversation turn (--role user|assistant|system)
+  --recall <query>             Search facts, thoughts, turns, and entities
+  --search [query]             Filtered search (--phase --branch --tag --min-confidence --category)
+  --branches                   List all DAG branches and head hashes
+  --checkout <branch>          Switch to or create a branch (--target <ID|HASH>)
+  --verify                     Verify SHA-256 hashes & parent linkage (exits 1 if invalid)
+  --stats                      Print summary metrics across phases, branches, and entities
+  --compile                    Print <CHAIN_OF_THOUGHTS_MEMORY> prompt (--base "<prompt>")
+  --export [markdown|json]     Export full trace (--out <file>)
+  --clear                      Clear rolling conversation turns (preserves pinned facts)
+  --help, -h                   Show this help message
+  --version, -v                Show CLI version
+
+Global Options:
+  --file <path>                Override storage file (or set ZOTH_COT_DATA_FILE)
+  --json                       Emit machine-readable JSON output`);
+}
+
+function parseArgs(argv) {
+  const opts = {
+    command: null,
+    positional: [],
+    file: process.env.ZOTH_COT_DATA_FILE || path.join(__dirname, '..', 'data', 'cot_memory.json'),
+    json: false,
+    category: null,
+    delete: false,
+    phase: null,
+    branch: null,
+    parent: null,
+    tags: [],
+    confidence: null,
+    revises: null,
+    role: 'user',
+    minConfidence: null,
+    target: null,
+    base: '',
+    out: null
+  };
+
+  const valueFlags = new Set([
+    '--file', '--category', '--phase', '--branch', '--parent', '--tag', '--tags',
+    '--confidence', '--revises', '--role', '--min-confidence', '--target', '--base', '--out'
+  ]);
+  const commandFlags = new Set([
+    '--tree', '--pin', '--unpin', '--step', '--turn', '--recall', '--search',
+    '--branches', '--checkout', '--verify', '--stats', '--compile', '--export',
+    '--clear', '--help', '-h', '--version', '-v'
+  ]);
+
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i];
+    if (tok === '--json') {
+      opts.json = true;
+    } else if (tok === '--delete') {
+      opts.delete = true;
+    } else if (valueFlags.has(tok)) {
+      const val = argv[++i];
+      if (val === undefined) throw new Error(`Missing value for ${tok}`);
+      switch (tok) {
+        case '--file': opts.file = val; break;
+        case '--category': opts.category = val; break;
+        case '--phase': opts.phase = val; break;
+        case '--branch': opts.branch = val; break;
+        case '--parent': opts.parent = val; break;
+        case '--tag':
+        case '--tags':
+          opts.tags.push(...val.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean));
+          break;
+        case '--confidence': opts.confidence = Number(val); break;
+        case '--revises': opts.revises = val; break;
+        case '--role': opts.role = val.toLowerCase(); break;
+        case '--min-confidence': opts.minConfidence = Number(val); break;
+        case '--target': opts.target = val; break;
+        case '--base': opts.base = val; break;
+        case '--out': opts.out = val; break;
+      }
+    } else if (commandFlags.has(tok) && !opts.command) {
+      opts.command = tok;
+    } else {
+      opts.positional.push(tok);
+    }
+  }
+  if (!opts.command) opts.command = '--tree';
+  return opts;
+}
+
+function main() {
+  let opts;
+  try {
+    opts = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    console.error(`[zoth-cot] Error: ${err.message}`);
+    process.exit(2);
+  }
+
+  if (opts.command === '--help' || opts.command === '-h') {
+    printHelp();
+    return;
+  }
+  if (opts.command === '--version' || opts.command === '-v') {
+    console.log(opts.json ? JSON.stringify({ name: 'zoth-cot', version: CLI_VERSION }) : `zoth-cot ${CLI_VERSION}`);
+    return;
+  }
+
+  const state = loadState(opts.file);
+  const rest = opts.positional.join(' ').trim();
+
+  try {
+    if (opts.command === '--pin') {
+      if (!rest) throw new Error('--pin requires a non-empty fact string');
+      const category = (opts.category || 'PINNED').toUpperCase();
+      const item = {
+        id: 'fact-' + Date.now().toString(36) + '-' + crypto.randomBytes(2).toString('hex'),
+        category,
+        fact: rest,
+        active: true,
+        ts: new Date().toISOString()
+      };
+      state.pinnedFacts.unshift(item);
+      saveState(opts.file, state);
+      if (opts.json) console.log(JSON.stringify(item, null, 2));
+      else console.log(`[◈ CoT] Pinned fact (${item.id}) [${category}]: "${rest}"`);
+      return;
+    }
+
+    if (opts.command === '--unpin') {
+      if (!rest) throw new Error('--unpin requires a fact ID');
+      const idx = state.pinnedFacts.findIndex((f) => f.id === rest);
+      if (idx === -1) throw new Error(`Pinned fact '${rest}' not found`);
+      let result;
+      if (opts.delete) {
+        const [removed] = state.pinnedFacts.splice(idx, 1);
+        result = { ok: true, action: 'deleted', fact: removed };
+      } else {
+        state.pinnedFacts[idx].active = false;
+        result = { ok: true, action: 'deactivated', fact: state.pinnedFacts[idx] };
+      }
+      saveState(opts.file, state);
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else console.log(`[◈ CoT] ${result.action} fact ${rest}`);
+      return;
+    }
+
+    if (opts.command === '--step') {
+      if (!rest) throw new Error('--step requires a thought string');
+      if (opts.confidence !== null && (Number.isNaN(opts.confidence) || opts.confidence < 0 || opts.confidence > 1)) {
+        throw new Error('--confidence must be a number between 0.0 and 1.0');
+      }
+      const targetBranch = opts.branch || state.activeBranch || 'main';
+      let prevHash;
+      if (opts.parent) {
+        const pnode = findNode(state, opts.parent);
+        if (!pnode) throw new Error(`Parent node '${opts.parent}' not found`);
+        prevHash = pnode.hash;
+      } else if (state.branches[targetBranch]) {
+        prevHash = state.branches[targetBranch];
+      } else {
+        prevHash = state.headHash;
+      }
+
+      let revisedNode = null;
+      if (opts.revises) {
+        revisedNode = findNode(state, opts.revises);
+        if (!revisedNode) throw new Error(`Revised node '${opts.revises}' not found`);
+      }
+
+      const phase = (opts.phase || 'REASONING').toUpperCase();
+      const idx = state.nextNodeIndex++;
+      const nodeId = `N${idx < 10 ? '0' + idx : idx}`;
+      const ts = new Date().toISOString();
+      const hash = computeNodeHash(prevHash, rest, phase, ts, targetBranch, 2);
+
+      const newNode = {
+        id: nodeId,
+        hash,
+        parent_hash: prevHash,
+        parentHash: prevHash,
+        branch: targetBranch,
+        thought: rest,
+        prompt: rest,
+        phase,
+        mood: 'TACTICAL',
+        tags: Array.from(new Set(opts.tags)),
+        confidence: opts.confidence,
+        revises: revisedNode ? revisedNode.id : null,
+        steps: {
+          recall: `Linked to prior head ${prevHash} on branch '${targetBranch}'.`,
+          context_link: `Phase ${phase} step.`,
+          contextLink: `Phase ${phase} step.`,
+          deduction: rest.slice(0, 60),
+          synthesis: rest
+        },
+        tokens: Math.max(32, Math.round(rest.length / 3.8)),
+        hash_version: 2,
+        timestamp: ts
+      };
+      if (revisedNode) revisedNode.superseded_by = nodeId;
+
+      state.nodes.push(newNode);
+      state.headHash = hash;
+      state.activeBranch = targetBranch;
+      state.branches[targetBranch] = hash;
+      saveState(opts.file, state);
+
+      if (opts.json) console.log(JSON.stringify(newNode, null, 2));
+      else console.log(`[◈ CoT] Added ${nodeId} [${hash}] (${phase}@${targetBranch} ◀ ${prevHash}): ${rest}`);
+      return;
+    }
+
+    if (opts.command === '--turn') {
+      if (!rest) throw new Error('--turn requires turn content');
+      if (!VALID_ROLES.has(opts.role)) throw new Error(`Invalid role '${opts.role}'. Use user, assistant, or system.`);
+      const entities = extractEntities(state, rest);
+      const msg = {
+        id: `msg-${state.messages.length + 1}`,
+        role: opts.role,
+        content: rest,
+        timestamp: new Date().toISOString(),
+        node_hash: state.headHash,
+        branch: state.activeBranch
+      };
+      state.messages.push(msg);
+      const maxMsgs = state.maxTurns * 2;
+      if (state.messages.length > maxMsgs) state.messages = state.messages.slice(-maxMsgs);
+      saveState(opts.file, state);
+      const out = { turn_id: msg.id, role: msg.role, content: msg.content, extracted_entities: entities, head_hash: state.headHash, branch: state.activeBranch };
+      if (opts.json) console.log(JSON.stringify(out, null, 2));
+      else console.log(`[◈ CoT] Recorded ${msg.id} (${msg.role}@${state.activeBranch})`);
+      return;
+    }
+
+    if (opts.command === '--clear') {
+      const cleared = state.messages.length;
+      state.messages = [];
+      state.turns = [];
+      saveState(opts.file, state);
+      const out = { ok: true, cleared_messages: cleared, preserved_facts: state.pinnedFacts.length };
+      if (opts.json) console.log(JSON.stringify(out, null, 2));
+      else console.log(`[◈ CoT] Cleared ${cleared} conversation messages (Pinned facts preserved).`);
+      return;
+    }
+
+    if (opts.command === '--branches') {
+      const counts = {};
+      state.nodes.forEach((n) => { const b = n.branch || 'main'; counts[b] = (counts[b] || 0) + 1; });
+      const entries = Object.entries(state.branches).sort().map(([name, head]) => {
+        const hn = findNode(state, head);
+        return { name, head_hash: head, head_id: hn ? hn.id : null, node_count: counts[name] || 0, active: name === state.activeBranch };
+      });
+      const out = { active_branch: state.activeBranch, head_hash: state.headHash, branches: entries };
+      if (opts.json) console.log(JSON.stringify(out, null, 2));
+      else {
+        entries.forEach((b) => console.log(`${b.active ? '*' : ' '} ${b.name} -> ${b.head_id || '???'} [${b.head_hash}] (${b.node_count} nodes)`));
+      }
+      return;
+    }
+
+    if (opts.command === '--checkout') {
+      if (!rest) throw new Error('--checkout requires a branch name');
+      let anchorHash = state.headHash;
+      let created = false;
+      if (state.branches[rest] && !opts.target) {
+        anchorHash = state.branches[rest];
+      } else {
+        if (opts.target) {
+          const anchor = findNode(state, opts.target);
+          if (!anchor) throw new Error(`Target node '${opts.target}' not found`);
+          anchorHash = anchor.hash;
+        }
+        created = !state.branches[rest];
+        state.branches[rest] = anchorHash;
+      }
+      state.activeBranch = rest;
+      state.headHash = anchorHash;
+      saveState(opts.file, state);
+      const out = { ok: true, created, active_branch: state.activeBranch, head_hash: state.headHash };
+      if (opts.json) console.log(JSON.stringify(out, null, 2));
+      else console.log(`[◈ CoT] ${created ? 'Created and switched to' : 'Switched to'} branch '${rest}' (${anchorHash})`);
+      return;
+    }
+
+    if (opts.command === '--verify') {
+      const result = verifyChain(state);
+      if (opts.json) console.log(JSON.stringify(result, null, 2));
+      else if (result.valid) {
+        console.log(`[◈ CoT] Merkle DAG VALID (${result.checked_nodes} nodes, ${result.branch_count} branches, head=${result.head_hash})`);
+      } else {
+        console.error(`[◈ CoT] Merkle DAG INVALID (${result.issues.length} issue(s)):`);
+        result.issues.forEach((iss) => console.error(`  - ${iss}`));
+      }
+      process.exit(result.valid ? 0 : 1);
+    }
+
+    if (opts.command === '--stats') {
+      const stats = getStats(state);
+      if (opts.json) console.log(JSON.stringify(stats, null, 2));
+      else {
+        console.log(`◈ Chain of Thoughts Stats (head=${stats.head_hash}, branch=${stats.active_branch})`);
+        console.log(`  Nodes: ${stats.node_count} | Branches: ${stats.branch_count} | Revised: ${stats.revised_node_count}`);
+        console.log(`  Turns: ${stats.turn_count} (${stats.message_count} msgs) | Checkpoints: ${stats.checkpoint_count}`);
+        console.log(`  Facts: ${stats.facts.active} active / ${stats.facts.total} total | Entities: ${stats.entities_total}`);
+        console.log(`  Phases: ${JSON.stringify(stats.phases)}`);
+        console.log(`  Avg Confidence: ${stats.avg_confidence ?? 'n/a'} | Est Tokens: ${stats.est_tokens} | Merkle: ${stats.merkle_valid ? 'VALID' : 'INVALID'}`);
+      }
+      return;
+    }
+
+    if (opts.command === '--compile') {
+      const prompt = compileSystemPrompt(state, opts.base);
+      if (opts.json) console.log(JSON.stringify({ head_hash: state.headHash, branch: state.activeBranch, prompt }, null, 2));
+      else console.log(prompt);
+      return;
+    }
+
+    if (opts.command === '--export') {
+      const fmt = rest || 'markdown';
+      const output = exportTrace(state, fmt);
+      if (opts.out) {
+        fs.writeFileSync(opts.out, output, 'utf8');
+        if (opts.json) console.log(JSON.stringify({ ok: true, format: fmt, out: opts.out, bytes: Buffer.byteLength(output, 'utf8') }, null, 2));
+        else console.log(`[◈ CoT] Exported ${fmt} trace to ${opts.out}`);
+      } else {
+        process.stdout.write(output);
+      }
+      return;
+    }
+
+    if (opts.command === '--recall' || opts.command === '--search') {
+      const q = rest.toLowerCase();
+      const phaseF = opts.phase ? opts.phase.toUpperCase() : null;
+      const branchF = opts.branch || null;
+      const tagF = opts.tags.length ? opts.tags[0] : null;
+      const catF = opts.category ? opts.category.toUpperCase() : null;
+      const minConf = opts.minConfidence;
+
+      const textMatch = (txt) => !q || String(txt || '').toLowerCase().includes(q);
+      const matchedFacts = (!phaseF && !branchF && !tagF && minConf === null)
+        ? state.pinnedFacts.filter((f) => (!catF || String(f.category || '').toUpperCase() === catF) && textMatch(`${f.fact} ${f.category}`))
+        : [];
+      const matchedTurns = (!phaseF && !tagF && minConf === null && !catF)
+        ? state.messages.filter((m) => (!branchF || (m.branch || 'main') === branchF) && textMatch(`${m.content} ${m.role}`))
+        : [];
+      const matchedThoughts = !catF
+        ? state.nodes.filter((n) => {
+            if (phaseF && String(n.phase || '').toUpperCase() !== phaseF) return false;
+            if (branchF && (n.branch || 'main') !== branchF) return false;
+            if (tagF && !(n.tags || []).includes(tagF)) return false;
+            if (minConf !== null && (typeof n.confidence !== 'number' || n.confidence < minConf)) return false;
+            return textMatch(`${n.thought || n.prompt} ${n.phase} ${n.branch} ${(n.tags || []).join(' ')}`);
+          })
+        : [];
+
+      const out = {
+        query: rest,
+        matched_facts: matchedFacts,
+        matched_turns: matchedTurns,
+        matched_thoughts: matchedThoughts,
+        total_matches: matchedFacts.length + matchedTurns.length + matchedThoughts.length
+      };
+      if (opts.json) {
+        console.log(JSON.stringify(out, null, 2));
+      } else {
+        console.log(`╔══[ ◈ CoT SEARCH: "${rest || '*'}" ]══════════════════════════════════════════╗`);
+        console.log(`║ Matched Facts (${matchedFacts.length}):`);
+        matchedFacts.forEach((f, i) => console.log(`║  [${i + 1}] [${f.category}] (${f.id}) ${f.fact}`));
+        console.log(`║ Matched Thought Nodes (${matchedThoughts.length}):`);
+        matchedThoughts.forEach((n) => console.log(`║  • [${n.id} // ${n.hash}] (${n.phase}@${n.branch}) ${n.thought || n.prompt}`));
+        console.log(`║ Matched Turns (${matchedTurns.length}):`);
+        matchedTurns.forEach((m) => console.log(`║  • [${m.role}] ${String(m.content || '').slice(0, 72)}`));
+        console.log('╚══════════════════════════════════════════════════════════════════════════════╝');
+      }
+      return;
+    }
+
+    // Default: --tree
+    if (opts.json) {
+      console.log(JSON.stringify(state, null, 2));
+      return;
+    }
+
+    const lines = [
+      '╔══════════════════════════════════════════════════════════════════════════════╗',
+      `║ ◈ ZOTH CHAIN OF THOUGHTS (CoT) // DAG (HEAD: ${state.headHash} @ ${state.activeBranch})`,
+      '╠══════════════════════════════════════════════════════════════════════════════╣',
+      `║ PINNED SEMANTIC MEMORY FACTS (${state.pinnedFacts.filter((f) => f.active !== false).length} active / ${state.pinnedFacts.length} total):`,
+      ...state.pinnedFacts.slice(0, 8).map((f, i) => `║  [${i + 1}] [${f.category}]${f.active === false ? ' (inactive)' : ''} ${String(f.fact || '').slice(0, 60)}`),
+      '╠══════════════════════════════════════════════════════════════════════════════╣',
+      `║ CRYPTOGRAPHIC REASONING DAG NODES (${state.nodes.length} NODES • ${Object.keys(state.branches).length} BRANCHES • ${state.messages.length} MSGS):`,
+      ...state.nodes.slice(-8).map((n) => {
+        const confStr = typeof n.confidence === 'number' ? ` conf=${n.confidence.toFixed(2)}` : '';
+        const tagsStr = n.tags && n.tags.length ? ` #${n.tags.join(' #')}` : '';
+        return [
+          `║  ├─● [${n.id} // ${n.hash}] (◀ ${n.parentHash || n.parent_hash}) [${n.phase || n.mood || 'REASONING'}@${n.branch || 'main'}${confStr}]${tagsStr}`,
+          `║  │   Thought  : ${String(n.thought || n.prompt || '').slice(0, 58)}`
+        ].join('\n');
+      }),
+      '╚══════════════════════════════════════════════════════════════════════════════╝'
+    ];
+    console.log(lines.join('\n'));
+  } catch (err) {
+    if (opts.json) {
+      console.error(JSON.stringify({ ok: false, error: err.message }));
+    } else {
+      console.error(`[zoth-cot] Error: ${err.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+main();

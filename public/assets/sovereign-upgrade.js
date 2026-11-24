@@ -173,7 +173,7 @@
           </div>
           <div>
             <div style="font-size:14px;font-weight:700;margin-bottom:6px;">📱 9:16 Vertical Launch Reel</div>
-            <video src="/assets/gpu-vertical-ad-9x16.mp4" controls muted loop style="width:100%;max-height:320px;object-fit:contain;border-radius:12px;border:1px solid #1F2937;background:#000;"></video>
+            <video src="/assets/gpu-ad-vertical-9x16.mp4" controls muted loop style="width:100%;max-height:320px;object-fit:contain;border-radius:12px;border:1px solid #1F2937;background:#000;"></video>
           </div>
         </div>
       `;
@@ -182,11 +182,11 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           <div style="background:#111420;padding:12px;border-radius:12px;border:1px solid #1F2937;">
             <div style="font-size:14px;font-weight:700;margin-bottom:8px;">🎞️ ComfyUI LTX-Video 2B Neural Motion Loop</div>
-            <img src="/assets/gpu-ltx-neural.webp" onerror="this.src='/assets/gpu-hero.jpg'" alt="${META.title} LTX-Video Neural Loop" style="width:100%;border-radius:10px;border:1px solid #1F2937;" />
+            <img src="/assets/zothos-lite-cot-motion-poster.jpg" alt="${META.title} LTX-Video Neural Loop Poster" style="width:100%;border-radius:10px;border:1px solid #1F2937;" />
           </div>
           <div style="background:#111420;padding:12px;border-radius:12px;border:1px solid #1F2937;">
             <div style="font-size:14px;font-weight:700;margin-bottom:8px;">🖼️ FLUX.1 + 4x-UltraSharp 4K Studio Backdrop</div>
-            <img src="/assets/gpu-hero-4k.jpg" onerror="this.src='/assets/gpu-hero.jpg'" alt="${META.title} 4K Studio Hero" style="width:100%;border-radius:10px;border:1px solid #1F2937;" />
+            <img src="/assets/gpu-hero-4k.png" alt="${META.title} 4K Studio Hero" style="width:100%;border-radius:10px;border:1px solid #1F2937;" />
           </div>
         </div>
       `;
